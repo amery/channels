@@ -1,7 +1,13 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
+
+#include <unistd.h>
+#ifdef _POSIX_PRIORITY_SCHEDULING
 #include <sched.h>
+#else
+#define sched_yield() sleep(0)
+#endif
 
 #include "channels.h"
 
