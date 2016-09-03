@@ -142,7 +142,7 @@ int channel_close(struct channel *chan)
 		ret = -1;
 	} else {
 		/* close and wake up everyone */
-		chan->flags &= ~CH_CLOSED;
+		chan->flags |= CH_CLOSED;
 		pthread_cond_broadcast(&chan->send_wait);
 		pthread_cond_broadcast(&chan->recv_wait);
 	}
