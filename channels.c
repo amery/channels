@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <sched.h>
 
 #include "channels.h"
 
@@ -174,9 +175,15 @@ fail_1:
 void channel_free(struct channel *chan)
 {
 	if (chan) {
-		pthread_cond_destroy(&chan->recv_wait);
-		pthread_cond_destroy(&chan->send_wait);
-		pthread_mutex_destroy(&chan->mutex);
+		channel_close(chan);
+
+		while (pthread_cond_destroy(&chan->recv_wait) == -1 && errno == EBUSY)
+			sched_yield();
+		while (pthread_cond_destroy(&chan->send_wait) == -1 && errno == EBUSY)
+			sched_yield();
+		while (pthread_mutex_destroy(&chan->mutex) == -1 && errno == EBUSY)
+			sched_yield();
+
 		free(chan);
 	}
 }
