@@ -183,7 +183,7 @@ int channel_select(struct channel_option *options, size_t count)
 
 	if (viables) {
 		/* and attempt to do one of those randomly chosen */
-		unsigned chosen = rand() % viables;
+		unsigned chosen = (viables == 1) ? 0 : rand() % viables;
 		unsigned i;
 
 		for (i = 0, p = options; i < count; p++, i++) {
