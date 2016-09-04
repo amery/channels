@@ -209,10 +209,14 @@ void channel_free(struct channel *chan)
 				pthread_cond_broadcast(&chan->send_wait);
 				pthread_cond_broadcast(&chan->recv_wait);
 			}
+		} else if (!chan->recv_waiting && !chan->send_waiting) {
+			waiting = 0;
 		}
 		pthread_mutex_unlock(&chan->mutex);
 
 		while (waiting) {
+			sched_yield();
+
 			pthread_mutex_lock(&chan->mutex);
 			if (!chan->recv_waiting && !chan->send_waiting)
 				waiting = 0;
