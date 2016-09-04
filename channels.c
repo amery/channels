@@ -30,6 +30,16 @@ struct channel {
 };
 
 /* internal queue */
+static inline int channel_queue_is_empty(const struct channel_queue *q)
+{
+	return q->count == 0;
+}
+
+static inline int channel_queue_is_full(const struct channel_queue *q)
+{
+	return q->count == q->slots;
+}
+
 static inline void channel_queue_init(struct channel_queue *q, size_t slots)
 {
 	q->slots = slots;
@@ -38,7 +48,7 @@ static inline void channel_queue_init(struct channel_queue *q, size_t slots)
 static inline int channel_queue_push(struct channel_queue *q, void *data)
 {
 	int ret = 0;
-	if (q->count != q->slots) {
+	if (!channel_queue_is_full(q)) {
 		size_t pos;
 
 		/* circular */
@@ -53,15 +63,11 @@ static inline int channel_queue_push(struct channel_queue *q, void *data)
 	return ret;
 }
 
-static inline int channel_queue_next(struct channel_queue *q, void **data)
+static inline int channel_queue_next(const struct channel_queue *q, void **data)
 {
-	int ret = 0;
-	if (q->count) {
-		ret = 1;
-
-		if (data)
-			*data = q->slot[q->next];
-	}
+	int ret = !channel_queue_is_empty(q);
+	if (ret && data)
+		*data = q->slot[q->next];
 	return ret;
 }
 
@@ -79,13 +85,22 @@ static inline int channel_queue_pop(struct channel_queue *q, void **data)
 	return ret;
 }
 
+/* channel */
+#define channel_is_empty(C) channel_queue_is_empty(&(C)->queue)
+#define channel_is_full(C)  channel_queue_is_full(&(C)->queue)
+
+static inline int channel_is_closed(const struct channel *chan)
+{
+	return !!(chan->flags & CH_CLOSED);
+}
+
 /* thread safe interface */
 int channel_send(struct channel *chan, void *data)
 {
 	int ret = 0;
 	pthread_mutex_lock(&chan->mutex);
 	while (1) {
-		if (chan->flags & CH_CLOSED) {
+		if (channel_is_closed(chan)) {
 			/* sorry, we are closed */
 			errno = EPIPE;
 			ret = -1;
@@ -116,7 +131,7 @@ int channel_recv(struct channel *chan, void **data)
 			if (chan->send_waiting)
 				pthread_cond_signal(&chan->send_wait);
 			break;
-		} else if (chan->flags & CH_CLOSED) {
+		} else if (channel_is_closed(chan)) {
 			/* empty and closed */
 			errno = EPIPE;
 			ret = -1;
@@ -136,7 +151,7 @@ int channel_close(struct channel *chan)
 {
 	int ret = 0;
 	pthread_mutex_lock(&chan->mutex);
-	if (chan->flags & CH_CLOSED) {
+	if (channel_is_closed(chan)) {
 		/* already closed */
 		errno = EPIPE;
 		ret = -1;
@@ -183,7 +198,7 @@ void channel_free(struct channel *chan)
 		int waiting = 1;
 
 		pthread_mutex_lock(&chan->mutex);
-		if ((chan->flags & CH_CLOSED) == 0) {
+		if (!channel_is_closed(chan)) {
 			/* do as channel_close() if the user forgot */
 			chan->flags |= CH_CLOSED;
 
