@@ -154,7 +154,7 @@ static inline int channel_select_can_recv(const struct channel_option *p)
 
 static inline int channel_select_can_send(const struct channel_option *p)
 {
-	return !channel_is_closed(p->chan) && !channel_is_full(p->chan);
+	return !p->recv && !channel_is_closed(p->chan) && !channel_is_full(p->chan);
 }
 
 static inline int channel_select_can_do(const struct channel_option *p)
