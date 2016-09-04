@@ -52,4 +52,12 @@ int channel_send(struct channel *, void *data);
  */
 int channel_recv(struct channel *, void **data);
 
+struct channel_option {
+	struct channel *chan;
+	void *send;
+	void **recv;
+};
+
+int channel_select(struct channel_option *options, size_t count);
+
 #endif /* !CHANNELS_H */

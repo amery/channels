@@ -147,6 +147,78 @@ int channel_recv(struct channel *chan, void **data)
 	return ret;
 }
 
+static inline int channel_select_can_recv(const struct channel_option *p)
+{
+	return p->recv && !channel_is_empty(p->chan);
+}
+
+static inline int channel_select_can_send(const struct channel_option *p)
+{
+	return !channel_is_closed(p->chan) && !channel_is_full(p->chan);
+}
+
+static inline int channel_select_can_do(const struct channel_option *p)
+{
+	return p->chan && (channel_select_can_recv(p) || channel_select_can_send(p));
+}
+
+int channel_select(struct channel_option *options, size_t count)
+{
+	const struct channel_option *pe = options + count;
+	struct channel_option *p;
+	int ret = count;
+	unsigned viables = 0;
+
+	/* lock all channels */
+	for (p = options; p < pe; p++) {
+		if (p->chan)
+			pthread_mutex_lock(&p->chan->mutex);
+	}
+
+	/* count viable options */
+	for (p = options; p < pe; p++) {
+		if (channel_select_can_do(p))
+			viables++;
+	}
+
+	if (viables) {
+		/* and attempt to do one of those randomly chosen */
+		unsigned chosen = rand() % viables;
+		unsigned i;
+
+		for (i = 0, p = options; i < count; p++, i++) {
+			struct channel *chan = p->chan;
+
+			if (!channel_select_can_do(p)) {
+				; /* skip unviable */
+			} else if (chosen) {
+				/* skip viable */
+				chosen--;
+			} else if (p->recv && channel_queue_pop(&chan->queue, p->recv)) {
+				/* done. wake up senders */
+				if (chan->send_waiting)
+					pthread_cond_signal(&chan->send_wait);
+				break;
+			} else if (channel_queue_push(&chan->queue, p->send)) {
+				/* done. wake up receivers */
+				if (chan->recv_waiting)
+					pthread_cond_signal(&chan->recv_wait);
+				break;
+			}
+		}
+
+		ret = i;
+	}
+
+	/* unlock all channels */
+	for (p = options; p < pe; p++) {
+		if (p->chan)
+			pthread_mutex_unlock(&p->chan->mutex);
+	}
+
+	return ret;
+}
+
 int channel_close(struct channel *chan)
 {
 	int ret = 0;
