@@ -175,18 +175,34 @@ fail_2:
 fail_1:
 	free(chan);
 	return NULL;
-
 }
 
 void channel_free(struct channel *chan)
 {
 	if (chan) {
-		channel_close(chan);
+		int closed = 0;
 
-		while (pthread_cond_destroy(&chan->recv_wait) == -1 && errno == EBUSY)
-			sched_yield();
-		while (pthread_cond_destroy(&chan->send_wait) == -1 && errno == EBUSY)
-			sched_yield();
+		/* avoid having active users of \a chan */
+		while (!closed) {
+			pthread_mutex_lock(&chan->mutex);
+
+			/* do as channel_close() if the user forgot */
+			if ((chan->flags & CH_CLOSED) == 0) {
+				/* close and wake up everyone */
+				chan->flags |= CH_CLOSED;
+				pthread_cond_broadcast(&chan->send_wait);
+				pthread_cond_broadcast(&chan->recv_wait);
+			}
+
+			if (!chan->recv_waiting && !chan->send_waiting)
+				closed = 1;
+			pthread_mutex_unlock(&chan->mutex);
+		}
+
+		pthread_cond_destroy(&chan->recv_wait);
+		pthread_cond_destroy(&chan->send_wait);
+
+		/* just some extra paranoia. wait until the lock is free. */
 		while (pthread_mutex_destroy(&chan->mutex) == -1 && errno == EBUSY)
 			sched_yield();
 
