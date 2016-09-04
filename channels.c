@@ -180,25 +180,31 @@ fail_1:
 void channel_free(struct channel *chan)
 {
 	if (chan) {
-		int closed = 0;
+		int waiting = 1;
 
-		/* avoid having active users of \a chan */
-		while (!closed) {
-			pthread_mutex_lock(&chan->mutex);
-
+		pthread_mutex_lock(&chan->mutex);
+		if ((chan->flags & CH_CLOSED) == 0) {
 			/* do as channel_close() if the user forgot */
-			if ((chan->flags & CH_CLOSED) == 0) {
-				/* close and wake up everyone */
-				chan->flags |= CH_CLOSED;
+			chan->flags |= CH_CLOSED;
+
+			if (!chan->recv_waiting && !chan->send_waiting) {
+				/* but no one was waiting anyway */
+				waiting = 0;
+			} else {
 				pthread_cond_broadcast(&chan->send_wait);
 				pthread_cond_broadcast(&chan->recv_wait);
 			}
+		}
+		pthread_mutex_unlock(&chan->mutex);
 
+		while (waiting) {
+			pthread_mutex_lock(&chan->mutex);
 			if (!chan->recv_waiting && !chan->send_waiting)
-				closed = 1;
+				waiting = 0;
 			pthread_mutex_unlock(&chan->mutex);
 		}
 
+		/* no one is waiting, proceed */
 		pthread_cond_destroy(&chan->recv_wait);
 		pthread_cond_destroy(&chan->send_wait);
 
