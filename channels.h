@@ -52,12 +52,14 @@ int channel_send(struct channel *, void *data);
  */
 int channel_recv(struct channel *, void **data);
 
+#define CHANNEL_SELECT_FIRST	(1 << 0)
+
 struct channel_option {
 	struct channel *chan;
 	void *send;
 	void **recv;
 };
 
-int channel_select(struct channel_option *options, size_t count);
+int channel_select(struct channel_option *options, size_t count, unsigned flags);
 
 #endif /* !CHANNELS_H */

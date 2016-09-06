@@ -162,11 +162,12 @@ static inline int channel_select_can_do(const struct channel_option *p)
 	return p->chan && (channel_select_can_recv(p) || channel_select_can_send(p));
 }
 
-int channel_select(struct channel_option *options, size_t count)
+int channel_select(struct channel_option *options, size_t count, unsigned flags)
 {
 	const struct channel_option *pe = options + count;
 	struct channel_option *p;
 	int ret = count;
+	unsigned chosen = 0;
 	unsigned viables = 0;
 
 	/* lock all channels */
@@ -175,15 +176,21 @@ int channel_select(struct channel_option *options, size_t count)
 			pthread_mutex_lock(&p->chan->mutex);
 	}
 
-	/* count viable options */
-	for (p = options; p < pe; p++) {
-		if (channel_select_can_do(p))
-			viables++;
+	if (flags & CHANNEL_SELECT_FIRST) {
+		/* just pick the first */
+		viables = 1;
+	} else {
+		/* count viable options and pick one randomly */
+		for (p = options; p < pe; p++) {
+			if (channel_select_can_do(p))
+				viables++;
+		}
+
+		if (viables > 1)
+			chosen = rand() % viables;
 	}
 
 	if (viables) {
-		/* and attempt to do one of those randomly chosen */
-		unsigned chosen = (viables == 1) ? 0 : rand() % viables;
 		unsigned i;
 
 		for (i = 0, p = options; i < count; p++, i++) {
