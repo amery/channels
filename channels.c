@@ -21,12 +21,13 @@ enum {
 };
 
 struct channel {
-	struct channel_queue queue;
 	unsigned flags;
-	size_t send_waiting, recv_waiting;
 
 	pthread_mutex_t mutex;
 	pthread_cond_t send_wait, recv_wait;
+	size_t send_waiting, recv_waiting;
+
+	struct channel_queue queue;
 };
 
 /* internal queue */
